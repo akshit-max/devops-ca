@@ -15,11 +15,6 @@ data "aws_ami" "ubuntu" {
 }
 
 
-resource "aws_key_pair" "deployer" {
-  key_name   = "${var.project_name}-key"
-  public_key = file("${path.module}/../devops-ha-key.pub")
-}
-
 
 locals {
   user_data = <<-EOF
@@ -56,6 +51,11 @@ locals {
 
               systemctl enable docker
               systemctl start docker
+
+              snap install amazon-ssm-agent --classic
+              snap start amazon-ssm-agent
+              systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent.service
+              systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service
               EOF
 }
 
@@ -72,7 +72,9 @@ resource "aws_instance" "app" {
     aws_security_group.ec2.id
   ]
 
-  key_name = aws_key_pair.deployer.key_name
+  key_name = "devops-ha-web-app-key"
+
+  iam_instance_profile = aws_iam_instance_profile.ec2.name
 
   associate_public_ip_address = true
 
@@ -80,5 +82,9 @@ resource "aws_instance" "app" {
 
   tags = {
     Name = "${var.project_name}-server-${count.index + 1}"
+  }
+
+  lifecycle {
+    ignore_changes = [user_data]
   }
 }

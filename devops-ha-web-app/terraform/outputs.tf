@@ -32,3 +32,18 @@ output "load_balancer_dns" {
   description = "Application Load Balancer DNS"
   value       = aws_lb.main.dns_name
 }
+
+output "github_actions_role_arn" {
+  description = "IAM Role ARN for GitHub Actions OIDC"
+  value       = aws_iam_role.github_actions.arn
+}
+
+output "instance_1_id" {
+  description = "ID of EC2 server 1"
+  value       = aws_instance.app[0].id
+}
+
+output "instance_2_id" {
+  description = "ID of EC2 server 2"
+  value       = aws_instance.app[1].id
+}
