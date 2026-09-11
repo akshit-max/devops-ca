@@ -7,7 +7,7 @@ def test_home():
     response = client.get("/")
 
     assert response.status_code == 200
-    assert b"DevOps Highly Available Web Application" in response.data
+    assert b"DEVOPS HA MONITOR" in response.data
 
 
 def test_health():
