@@ -74,6 +74,20 @@ resource "aws_iam_role" "ec2" {
       }
     }]
   })
+
+  inline_policy {
+    name = "ec2-describe-instances"
+    policy = jsonencode({
+      Version = "2012-10-17"
+      Statement = [
+        {
+          Effect   = "Allow"
+          Action   = "ec2:DescribeInstances"
+          Resource = "*"
+        }
+      ]
+    })
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "ssm" {

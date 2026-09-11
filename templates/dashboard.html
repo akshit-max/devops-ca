@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevOps HA Monitor - High Availability Architecture</title>
+    <!-- Bootstrap 5 & FontAwesome -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: #111827;
+            --card-border: #1f293d;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-yellow: #f59e0b;
+            --accent-purple: #8b5cf6;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+            padding-bottom: 50px;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Top Header */
+        .navbar-custom {
+            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%);
+            border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            padding: 18px 0;
+        }
+
+        .brand-title {
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 1.6rem;
+        }
+
+        /* Custom Cards */
+        .card-custom {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+            transition: transform 0.2s ease, border-color 0.2s ease;
+        }
+
+        .card-custom:hover {
+            border-color: rgba(99, 102, 241, 0.4);
+        }
+
+        .stat-card {
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card .stat-icon {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            font-size: 2.2rem;
+            opacity: 0.15;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-muted);
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        /* HA Visualizer Topology */
+        .topology-container {
+            padding: 25px;
+            position: relative;
+        }
+
+        .node-box {
+            background: #1e293b;
+            border: 2px solid #334155;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .node-box.active-serving {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .node-box.unhealthy {
+            border-color: var(--accent-red);
+            background: #2d1517;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+        }
+
+        .node-icon {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+
+        .node-title {
+            font-weight: 700;
+            font-size: 1rem;
+            margin-bottom: 2px;
+        }
+
+        .node-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .traffic-line {
+            height: 3px;
+            background: #334155;
+            position: relative;
+            margin: 15px 0;
+        }
+
+        .traffic-line.active {
+            background: linear-gradient(90deg, #3b82f6, #10b981);
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+        }
+
+        .pulse-badge {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .pulse-green { background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .pulse-red { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .pulse-yellow { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+
+        .serving-pill {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid #10b981;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-top: 5px;
+        }
+
+        /* Chart Canvas Container */
+        .chart-container {
+            position: relative;
+            height: 240px;
+            width: 100%;
+        }
+
+        .badge-az {
+            background: #334155;
+            color: #cbd5e1;
+            font-size: 0.75rem;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <nav class="navbar navbar-custom mb-4">
+        <div class="container d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+                <i class="fa-solid fa-server brand-title me-3"></i>
+                <div>
+                    <div class="brand-title">DEVOPS HA MONITOR</div>
+                    <div class="text-muted small">AWS Multi-AZ Auto-Failover Web Infrastructure</div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <span class="badge bg-dark border border-secondary text-light px-3 py-2">
+                    <i class="fa-solid fa-location-dot me-1 text-primary"></i> Region: <span class="mono">ap-south-1</span>
+                </span>
+                <span class="badge bg-dark border border-secondary text-light px-3 py-2">
+                    <i class="fa-solid fa-code-branch me-1 text-info"></i> Version: <span class="mono">{{ version }}</span>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        
+        <!-- Summary Stats Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card-custom stat-card">
+                    <i class="fa-solid fa-heart-pulse stat-icon text-success"></i>
+                    <div class="stat-label">Overall Status</div>
+                    <div class="stat-value" id="overall-status">
+                        <span class="text-success"><span class="pulse-badge pulse-green"></span>HEALTHY</span>
+                    </div>
+                    <div class="small text-muted mt-1">Multi-AZ Active-Active</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card-custom stat-card">
+                    <i class="fa-solid fa-arrows-split-up-and-left stat-icon text-warning"></i>
+                    <div class="stat-label">Failover Readiness</div>
+                    <div class="stat-value" id="failover-status">
+                        <span class="text-success"><i class="fa-solid fa-shield-halved me-1"></i>Normal</span>
+                    </div>
+                    <div class="small text-muted mt-1" id="failover-subtext">2/2 Targets Healthy</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card-custom stat-card">
+                    <i class="fa-solid fa-network-wired stat-icon text-info"></i>
+                    <div class="stat-label">Current Serving Server</div>
+                    <div class="stat-value text-info mono" style="font-size: 1.3rem; margin-top: 4px;" id="current-serving-id">
+                        {{ hostname }}
+                    </div>
+                    <div class="small text-muted mt-1">Routed by AWS ALB</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card-custom stat-card">
+                    <i class="fa-solid fa-cubes stat-icon text-purple"></i>
+                    <div class="stat-label">Deployment Mode</div>
+                    <div class="stat-value text-purple" style="font-size: 1.4rem;">
+                        <i class="fa-brands fa-docker me-1 text-primary"></i> Docker Container
+                    </div>
+                    <div class="small text-muted mt-1">CI/CD via GitHub OIDC</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HA Architecture Visualizer -->
+        <div class="card-custom mb-4">
+            <div class="card-header bg-transparent border-bottom border-secondary px-4 py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-diagram-project me-2 text-primary"></i>High Availability Traffic Flow & Topology</h5>
+                <span class="badge bg-secondary text-light">Real-Time Auto Routing</span>
+            </div>
+            <div class="topology-container">
+                <div class="row align-items-center text-center">
+                    
+                    <!-- Client -->
+                    <div class="col-md-3">
+                        <div class="node-box">
+                            <div class="node-icon text-primary"><i class="fa-solid fa-globe"></i></div>
+                            <div class="node-title">Internet User</div>
+                            <div class="node-subtitle">HTTP/80 Traffic</div>
+                        </div>
+                    </div>
+
+                    <!-- Flow Arrow -->
+                    <div class="col-md-1 d-none d-md-block text-center">
+                        <i class="fa-solid fa-chevron-right text-muted fa-lg"></i>
+                    </div>
+
+                    <!-- ALB -->
+                    <div class="col-md-3">
+                        <div class="node-box border-info">
+                            <div class="node-icon text-info"><i class="fa-solid fa-network-wired"></i></div>
+                            <div class="node-title">Application Load Balancer</div>
+                            <div class="node-subtitle">AWS ALB (Round-Robin)</div>
+                        </div>
+                    </div>
+
+                    <!-- Flow Arrow -->
+                    <div class="col-md-1 d-none d-md-block text-center">
+                        <i class="fa-solid fa-chevron-right text-muted fa-lg"></i>
+                    </div>
+
+                    <!-- Targets -->
+                    <div class="col-md-4">
+                        <div class="d-flex flex-column gap-2" id="topology-servers">
+                            <div class="p-2 border rounded text-start bg-dark text-muted">
+                                <i class="fa-solid fa-circle-notch fa-spin me-2"></i>Loading EC2 Nodes...
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Server Cards Section -->
+        <h5 class="fw-bold mb-3"><i class="fa-solid fa-server me-2 text-info"></i>EC2 Instance Cluster</h5>
+        <div class="row g-3 mb-4" id="servers-container">
+            <div class="col-12 text-center py-4 card-custom">
+                <div class="spinner-border text-info" role="status"></div>
+                <p class="mt-2 text-muted">Discovering EC2 instances from AWS ap-south-1...</p>
+            </div>
+        </div>
+
+        <!-- CloudWatch Performance Charts Section -->
+        <h5 class="fw-bold mb-3"><i class="fa-solid fa-chart-line me-2 text-success"></i>Live AWS CloudWatch Metrics</h5>
+        <div class="row g-3 mb-4">
+            
+            <!-- Chart 1: CPU Utilization -->
+            <div class="col-md-6">
+                <div class="card-custom p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0"><i class="fa-solid fa-microchip me-2 text-warning"></i>EC2 CPU Utilization (%)</h6>
+                        <span class="small text-muted">AWS/EC2 Metric</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartCpu"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart 2: Network Traffic -->
+            <div class="col-md-6">
+                <div class="card-custom p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0"><i class="fa-solid fa-arrow-up-right-dots me-2 text-info"></i>EC2 Network Traffic (Bytes)</h6>
+                        <span class="small text-muted">Network In / Out</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartNetwork"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart 3: ALB Request Count -->
+            <div class="col-md-6">
+                <div class="card-custom p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0"><i class="fa-solid fa-chart-bar me-2 text-primary"></i>ALB Request Count</h6>
+                        <span class="small text-muted">AWS/ApplicationELB</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartRequests"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart 4: Target Response Time -->
+            <div class="col-md-6">
+                <div class="card-custom p-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0"><i class="fa-solid fa-stopwatch me-2 text-success"></i>ALB Target Response Time (s)</h6>
+                        <span class="small text-muted">AWS/ApplicationELB</span>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="chartResponseTime"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="text-center text-muted small mt-4">
+            DevOps HA Monitor &bull; Powered by Flask, Boto3, CloudWatch &amp; AWS Infrastructure
+        </div>
+
+    </div>
+
+    <!-- JavaScript & Chart Init -->
+    <script>
+        const CURRENT_HOSTNAME = "{{ hostname }}";
+        let chartCpuInst, chartNetworkInst, chartRequestsInst, chartResponseTimeInst;
+
+        // Chart global defaults for Dark Theme
+        Chart.defaults.color = '#9ca3af';
+        Chart.defaults.borderColor = '#1f293d';
+        Chart.defaults.font.family = "'Inter', sans-serif";
+
+        function initCharts() {
+            // 1. CPU Chart
+            const ctxCpu = document.getElementById('chartCpu').getContext('2d');
+            chartCpuInst = new Chart(ctxCpu, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'EC2 Server 1', data: [], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.3 },
+                        { label: 'EC2 Server 2', data: [], borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true, tension: 0.3 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100 } } }
+            });
+
+            // 2. Network Chart
+            const ctxNet = document.getElementById('chartNetwork').getContext('2d');
+            chartNetworkInst = new Chart(ctxNet, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Network In (Bytes)', data: [], borderColor: '#60a5fa', fill: false, tension: 0.3 },
+                        { label: 'Network Out (Bytes)', data: [], borderColor: '#f59e0b', fill: false, tension: 0.3 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+
+            // 3. ALB Request Count Chart
+            const ctxReq = document.getElementById('chartRequests').getContext('2d');
+            chartRequestsInst = new Chart(ctxReq, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'ALB Total Requests', data: [], backgroundColor: '#8b5cf6', borderRadius: 4 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+
+            // 4. Response Time Chart
+            const ctxResp = document.getElementById('chartResponseTime').getContext('2d');
+            chartResponseTimeInst = new Chart(ctxResp, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Avg Target Response Time (s)', data: [], borderColor: '#34d399', backgroundColor: 'rgba(52, 211, 153, 0.1)', fill: true, tension: 0.3 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+            });
+        }
+
+        async function fetchServerStatus() {
+            try {
+                const res = await fetch('/api/servers');
+                const data = await res.json();
+                const servers = data.servers || [];
+
+                let healthyCount = 0;
+                let cardsHtml = '';
+                let topologyHtml = '';
+
+                servers.forEach(server => {
+                    const isHealthy = server.state === 'running';
+                    if (isHealthy) healthyCount++;
+
+                    const isServing = (server.id === CURRENT_HOSTNAME || server.name === CURRENT_HOSTNAME) || CURRENT_HOSTNAME.includes(server.id.replace('i-', ''));
+
+                    // Render Server Card
+                    cardsHtml += `
+                    <div class="col-md-6">
+                        <div class="card-custom p-3 ${isServing ? 'border-success' : ''}">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-bold h6 mb-0 text-light">${server.name.toUpperCase()}</span>
+                                <span class="badge-az"><i class="fa-solid fa-layer-group me-1"></i>${server.az}</span>
+                            </div>
+                            <div class="d-flex align-items-center mb-3">
+                                ${isHealthy ? '<span class="pulse-badge pulse-green"></span><span class="text-success fw-bold">RUNNING / HEALTHY</span>' : '<span class="pulse-badge pulse-red"></span><span class="text-danger fw-bold">STOPPED / UNHEALTHY</span>'}
+                                ${isServing ? '<span class="serving-pill ms-auto"><i class="fa-solid fa-bolt me-1"></i>Active Serving Target</span>' : ''}
+                            </div>
+                            <div class="row g-2 small text-muted mono">
+                                <div class="col-6">Instance ID: <span class="text-light">${server.id}</span></div>
+                                <div class="col-6">State: <span class="text-light">${server.state}</span></div>
+                                <div class="col-6">Private IP: <span class="text-light">${server.private_ip}</span></div>
+                                <div class="col-6">Public IP: <span class="text-light">${server.public_ip}</span></div>
+                                <div class="col-12 mt-2">CPU Utilization: <span class="text-warning fw-bold">${server.cpu}%</span></div>
+                            </div>
+                        </div>
+                    </div>`;
+
+                    // Render Topology Box
+                    topologyHtml += `
+                    <div class="node-box ${isServing ? 'active-serving' : ''} ${!isHealthy ? 'unhealthy' : ''}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="node-title">${server.name.toUpperCase()} (${server.az})</div>
+                                <div class="node-subtitle mono">${server.id} | ${server.private_ip}</div>
+                            </div>
+                            <div>
+                                ${isHealthy ? '<span class="badge bg-success">ONLINE</span>' : '<span class="badge bg-danger">OFFLINE</span>'}
+                                ${isServing ? '<div class="serving-pill"><i class="fa-solid fa-arrow-left me-1"></i>SERVED</div>' : ''}
+                            </div>
+                        </div>
+                    </div>`;
+                });
+
+                document.getElementById('servers-container').innerHTML = cardsHtml;
+                document.getElementById('topology-servers').innerHTML = topologyHtml;
+
+                // Update Overall Status Badges
+                const overallEl = document.getElementById('overall-status');
+                const failoverEl = document.getElementById('failover-status');
+                const failoverSub = document.getElementById('failover-subtext');
+
+                if (healthyCount === 2) {
+                    overallEl.innerHTML = '<span class="text-success"><span class="pulse-badge pulse-green"></span>HEALTHY</span>';
+                    failoverEl.innerHTML = '<span class="text-success"><i class="fa-solid fa-shield-halved me-1"></i>Normal</span>';
+                    failoverSub.innerText = '2/2 Multi-AZ Instances Active';
+                } else if (healthyCount === 1) {
+                    overallEl.innerHTML = '<span class="text-warning"><span class="pulse-badge pulse-yellow"></span>DEGRADED</span>';
+                    failoverEl.innerHTML = '<span class="text-warning"><i class="fa-solid fa-triangle-exclamation me-1"></i>Failover Active</span>';
+                    failoverSub.innerText = '1 Instance Down - Traffic Rerouted';
+                } else {
+                    overallEl.innerHTML = '<span class="text-danger"><span class="pulse-badge pulse-red"></span>OUTAGE</span>';
+                    failoverEl.innerHTML = '<span class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i>System Down</span>';
+                    failoverSub.innerText = '0 Instances Available';
+                }
+
+            } catch (err) {
+                console.error("Failed to fetch server status", err);
+            }
+        }
+
+        async function fetchMetricsData() {
+            try {
+                const res = await fetch('/api/metrics');
+                const data = await res.json();
+                
+                const labels = data.labels || [];
+
+                // 1. CPU Chart
+                if (data.cpu) {
+                    chartCpuInst.data.labels = labels;
+                    chartCpuInst.data.datasets[0].data = data.cpu.server1 || [];
+                    chartCpuInst.data.datasets[1].data = data.cpu.server2 || [];
+                    chartCpuInst.update();
+                }
+
+                // 2. Network Chart
+                if (data.network) {
+                    chartNetworkInst.data.labels = labels;
+                    chartNetworkInst.data.datasets[0].data = data.network.in || [];
+                    chartNetworkInst.data.datasets[1].data = data.network.out || [];
+                    chartNetworkInst.update();
+                }
+
+                // 3. ALB Requests Chart
+                if (data.alb_requests) {
+                    chartRequestsInst.data.labels = labels;
+                    chartRequestsInst.data.datasets[0].data = data.alb_requests || [];
+                    chartRequestsInst.update();
+                }
+
+                // 4. Response Time Chart
+                if (data.alb_response_time) {
+                    chartResponseTimeInst.data.labels = labels;
+                    chartResponseTimeInst.data.datasets[0].data = data.alb_response_time || [];
+                    chartResponseTimeInst.update();
+                }
+
+            } catch (err) {
+                console.error("Failed to fetch CloudWatch metrics", err);
+            }
+        }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            fetchServerStatus();
+            fetchMetricsData();
+
+            // Poll status every 8s
+            setInterval(fetchServerStatus, 8000);
+            // Refresh metrics every 30s
+            setInterval(fetchMetricsData, 30000);
+        });
+    </script>
+</body>
+</html>
